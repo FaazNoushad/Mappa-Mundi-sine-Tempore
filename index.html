@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Map Sandbox</title>
+
+  <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0">
+
+  <style>
+    body { margin: 0; overflow: hidden; background: #222; }
+    .ui {
+      position: fixed;
+      top: 10px; left: 10px;
+      z-index: 10;
+      background: #111;
+      padding: 10px;
+      border-radius: 8px;
+    }
+    button { margin: 2px; }
+  </style>
+</head>
+<body>
+
+<div class="ui">
+  <button onclick="setColor('yellow')">Yellow</button>
+  <button onclick="setColor('red')">Red</button>
+  <button onclick="setColor('blue')">Blue</button>
+  <button onclick="setColor('green')">Green</button>
+  <button onclick="setEraser()">Eraser</button>
+  <button onclick="resetMap()">Reset</button>
+</div>
+
+<canvas id="mapCanvas"></canvas>
+
+<script>
+const canvas = document.getElementById("mapCanvas");
+const ctx = canvas.getContext("2d");
+
+const baseCanvas = document.createElement("canvas");
+const baseCtx = baseCanvas.getContext("2d");
+
+const renderCanvas = document.createElement("canvas");
+const renderCtx = renderCanvas.getContext("2d");
+
+const img = new Image();
+img.src = "provinces.png";
+
+let zoom = 1;
+let ownership = {};
+let hoveredKey = null;
+let eraserMode = false;
+
+const COLORS = {
+  yellow: [255,255,0],
+  red: [255,0,0],
+  blue: [0,120,255],
+  green: [0,200,0]
+};
+
+let selectedColor = "yellow";
+
+// ======================
+// UI
+// ======================
+function setColor(c){
+  selectedColor = c;
+  eraserMode = false;
+  canvas.style.cursor = "pointer";
+}
+
+function setEraser(){
+  eraserMode = true;
+  canvas.style.cursor = "crosshair";
+}
+
+function resetMap(){
+  ownership = {};
+  draw();
+}
+
+// ======================
+// INIT
+// ======================
+img.onload = () => {
+  baseCanvas.width = img.width;
+  baseCanvas.height = img.height;
+  baseCtx.drawImage(img, 0, 0);
+
+  renderCanvas.width = img.width;
+  renderCanvas.height = img.height;
+
+  fitToScreen();
+  draw();
+};
+
+window.addEventListener("resize", () => { fitToScreen(); draw(); });
+
+function fitToScreen(){
+  zoom = Math.min(window.innerWidth/img.width, window.innerHeight/img.height);
+  canvas.width = img.width * zoom;
+  canvas.height = img.height * zoom;
+}
+
+// ======================
+// INPUT
+// ======================
+canvas.addEventListener("click", e => {
+  const rect = canvas.getBoundingClientRect();
+  const x = Math.floor((e.clientX - rect.left)/zoom);
+  const y = Math.floor((e.clientY - rect.top)/zoom);
+
+  const p = baseCtx.getImageData(x,y,1,1).data;
+  const key = `${p[0]},${p[1]},${p[2]},${p[3]}`;
+
+  if (eraserMode) delete ownership[key];
+  else ownership[key] = selectedColor;
+
+  draw();
+});
+
+canvas.addEventListener("mousemove", e => {
+  const rect = canvas.getBoundingClientRect();
+  const x = Math.floor((e.clientX - rect.left)/zoom);
+  const y = Math.floor((e.clientY - rect.top)/zoom);
+
+  const p = baseCtx.getImageData(x,y,1,1).data;
+  hoveredKey = `${p[0]},${p[1]},${p[2]},${p[3]}`;
+  draw();
+});
+
+// ======================
+// DRAW
+// ======================
+function draw(){
+  ctx.imageSmoothingEnabled = false;
+
+  ctx.setTransform(zoom,0,0,zoom,0,0);
+  ctx.clearRect(0,0,img.width,img.height);
+
+  drawOwnership();
+  ctx.drawImage(renderCanvas,0,0);
+
+  ctx.setTransform(1,0,0,1,0,0);
+  drawBorders();
+  drawLabels();
+}
+
+// ======================
+// OWNERSHIP
+// ======================
+function drawOwnership(){
+  const baseData = baseCtx.getImageData(0,0,baseCanvas.width,baseCanvas.height).data;
+  const imageData = renderCtx.createImageData(baseCanvas.width, baseCanvas.height);
+  const data = imageData.data;
+
+  for(let i=0;i<baseData.length;i+=4){
+    const key = `${baseData[i]},${baseData[i+1]},${baseData[i+2]},${baseData[i+3]}`;
+
+    if(ownership[key]){
+      const c = COLORS[ownership[key]];
+
+      if(key===hoveredKey){
+        data[i]=Math.min(c[0]+40,255);
+        data[i+1]=Math.min(c[1]+40,255);
+        data[i+2]=Math.min(c[2]+40,255);
+      } else {
+        data[i]=c[0]; data[i+1]=c[1]; data[i+2]=c[2];
+      }
+    } else {
+      data[i]=180; data[i+1]=180; data[i+2]=180;
+    }
+
+    data[i+3]=255;
+  }
+
+  renderCtx.putImageData(imageData,0,0);
+}
+
+// ======================
+// BORDERS
+// ======================
+function drawBorders(){
+  const w=baseCanvas.width, h=baseCanvas.height;
+  const data=baseCtx.getImageData(0,0,w,h).data;
+
+  function p(x,y){
+    if(x<0||y<0||x>=w||y>=h) return "__edge__";
+    const i=(y*w+x)*4;
+    return `${data[i]},${data[i+1]},${data[i+2]},${data[i+3]}`;
+  }
+
+  function c(x,y){ return ownership[p(x,y)]||"__neutral__"; }
+
+  ctx.beginPath();
+  for(let y=0;y<h;y++){
+    for(let x=0;x<w;x++){
+      if(p(x,y)!==p(x+1,y)){
+        ctx.moveTo((x+1)*zoom,y*zoom);
+        ctx.lineTo((x+1)*zoom,(y+1)*zoom);
+      }
+      if(p(x,y)!==p(x,y+1)){
+        ctx.moveTo(x*zoom,(y+1)*zoom);
+        ctx.lineTo((x+1)*zoom,(y+1)*zoom);
+      }
+    }
+  }
+  ctx.strokeStyle="rgba(0,0,0,0.2)";
+  ctx.lineWidth=2;
+  ctx.stroke();
+
+  ctx.beginPath();
+  for(let y=0;y<h;y++){
+    for(let x=0;x<w;x++){
+      if(c(x,y)!==c(x+1,y)){
+        ctx.moveTo((x+1)*zoom,y*zoom);
+        ctx.lineTo((x+1)*zoom,(y+1)*zoom);
+      }
+      if(c(x,y)!==c(x,y+1)){
+        ctx.moveTo(x*zoom,(y+1)*zoom);
+        ctx.lineTo((x+1)*zoom,(y+1)*zoom);
+      }
+    }
+  }
+  ctx.strokeStyle="black";
+  ctx.lineWidth=4;
+  ctx.stroke();
+}
+
+// ======================
+// LABELS (FINAL)
+// ======================
+function drawLabels(){
+  const w=baseCanvas.width, h=baseCanvas.height;
+  const data=baseCtx.getImageData(0,0,w,h).data;
+
+  function owner(x,y){
+    if(x<0||y<0||x>=w||y>=h) return "__neutral__";
+    const i=(y*w+x)*4;
+    const key=`${data[i]},${data[i+1]},${data[i+2]},${data[i+3]}`;
+    return ownership[key]||"__neutral__";
+  }
+
+  const countries={};
+
+  for(let y=0;y<h;y++){
+    for(let x=0;x<w;x++){
+      const o=owner(x,y);
+      if(o==="__neutral__") continue;
+      if(!countries[o]) countries[o]=[];
+      countries[o].push([x,y]);
+    }
+  }
+
+  for(let o in countries){
+    const pts=countries[o];
+    if(pts.length<120) continue;
+
+    let cx=0,cy=0;
+    for(const [x,y] of pts){ cx+=x; cy+=y; }
+    cx/=pts.length; cy/=pts.length;
+
+    let xx=0,yy=0,xy=0;
+    for(const [x,y] of pts){
+      const dx=x-cx, dy=y-cy;
+      xx+=dx*dx; yy+=dy*dy; xy+=dx*dy;
+    }
+
+    let theta=0.5*Math.atan2(2*xy,xx-yy);
+    const dir=[Math.cos(theta), Math.sin(theta)];
+    const perp=[-dir[1], dir[0]];
+
+    let bestLine=null, bestScore=0;
+
+    for(let offset=-50; offset<=50; offset+=2){
+      let seg=[], bestSeg=[];
+
+      for(let t=-200;t<=200;t++){
+        const x=Math.round(cx+dir[0]*t+perp[0]*offset);
+        const y=Math.round(cy+dir[1]*t+perp[1]*offset);
+
+        if(owner(x,y)===o) seg.push([x,y]);
+        else { if(seg.length>bestSeg.length) bestSeg=seg; seg=[]; }
+      }
+
+      if(seg.length>bestSeg.length) bestSeg=seg;
+      if(bestSeg.length<20) continue;
+
+      const dx=bestSeg.at(-1)[0]-bestSeg[0][0];
+      const dy=bestSeg.at(-1)[1]-bestSeg[0][1];
+
+      const direct=Math.hypot(dx,dy);
+      const straightness=direct/bestSeg.length;
+
+      let deviation=0;
+      for(let i=1;i<bestSeg.length;i++){
+        const dx1=bestSeg[i][0]-bestSeg[i-1][0];
+        const dy1=bestSeg[i][1]-bestSeg[i-1][1];
+        deviation+=Math.abs(dx1*perp[0]+dy1*perp[1]);
+      }
+      deviation/=bestSeg.length;
+
+      const score=bestSeg.length*Math.pow(straightness,2)/(1+deviation*5);
+
+      if(score>bestScore){
+        bestScore=score;
+        bestLine=bestSeg;
+      }
+    }
+
+    if(!bestLine) continue;
+
+    const start=bestLine[0];
+    const end=bestLine.at(-1);
+    const baseAngle=Math.atan2(end[1]-start[1],end[0]-start[0]);
+
+    // sample curve
+    const samples=[];
+    const step=Math.max(2,Math.floor(bestLine.length/6));
+    for(let i=0;i<bestLine.length;i+=step) samples.push(bestLine[i]);
+    samples.push(bestLine.at(-1));
+
+    const angles=[];
+    for(let i=0;i<samples.length-1;i++){
+      const dx=samples[i+1][0]-samples[i][0];
+      const dy=samples[i+1][1]-samples[i][1];
+      angles.push(Math.atan2(dy,dx));
+    }
+
+    const text=o.toUpperCase();
+    ctx.font="40px sans-serif";
+
+    const widths=text.split("").map(c=>ctx.measureText(c).width);
+    const totalWidth=widths.reduce((a,b)=>a+b,0);
+
+    const length=Math.hypot(end[0]-start[0],end[1]-start[1])*zoom;
+    const targetWidth=length*0.85;
+    const gap=(targetWidth-totalWidth)/(text.length-1||1);
+
+    ctx.lineJoin="round";
+    ctx.lineCap="round";
+    ctx.miterLimit=2;
+    ctx.lineWidth=3;
+    ctx.fillStyle="white";
+    ctx.strokeStyle="black";
+
+    const maxCurve=0.25;
+
+    for(let i=0;i<text.length;i++){
+      const t=i/(text.length-1||1);
+
+      const idx=t*(samples.length-1);
+      const i0=Math.floor(idx);
+      const i1=Math.min(i0+1,samples.length-1);
+      const lt=idx-i0;
+
+      const x=samples[i0][0]*(1-lt)+samples[i1][0]*lt;
+      const y=samples[i0][1]*(1-lt)+samples[i1][1]*lt;
+
+      const a0=angles[i0]||baseAngle;
+      const a1=angles[i1]||baseAngle;
+      let a=a0*(1-lt)+a1*lt;
+      a=baseAngle+(a-baseAngle)*maxCurve;
+
+      ctx.save();
+      ctx.translate(x*zoom,y*zoom);
+      ctx.rotate(a);
+
+      ctx.strokeText(text[i],0,0);
+      ctx.fillText(text[i],0,0);
+
+      ctx.restore();
+    }
+  }
+}
+</script>
+
+</body>
+</html>
