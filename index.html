@@ -1,36 +1,55 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Map Sandbox</title>
-  <style>
-    body { margin: 0; overflow: hidden; background: #222; }
-    .ui {
-      position: fixed;
-      top: 10px; left: 10px;
-      z-index: 10;
-      background: #111;
-      padding: 10px;
-      border-radius: 8px;
-    }
-    button { margin: 2px; }
-  </style>
+    <title>Map Sandbox</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: #222; }
+
+        .ui {
+            position: fixed;
+            top: 10px; left: 10px;
+            z-index: 10;
+            background: #111;
+            padding: 10px;
+            border-radius: 8px;
+        }
+
+        button { margin: 2px; }
+
+        #debugPanel{
+            position:fixed;
+            top:10px;
+            right:10px;
+            background:#000;
+            color:#0f0;
+            font-family:monospace;
+            font-size:12px;
+            padding:10px;
+            border-radius:8px;
+            z-index:20;
+            max-width:240px;
+        }
+    </style>
 </head>
 <body>
 
 <div class="ui">
-  <button onclick="setColor('yellow')">Yellow</button>
-  <button onclick="setColor('red')">Red</button>
-  <button onclick="setColor('blue')">Blue</button>
-  <button onclick="setColor('green')">Green</button>
-  <button onclick="setEraser()">Eraser</button>
-  <button onclick="resetMap()">Reset</button>
+    <button onclick="setColor('yellow')">Yellow</button>
+    <button onclick="setColor('red')">Red</button>
+    <button onclick="setColor('blue')">Blue</button>
+    <button onclick="setColor('green')">Green</button>
+    <button onclick="setEraser()">Eraser</button>
+    <button onclick="resetMap()">Reset</button>
 </div>
 
+<div id="debugPanel"></div>
 <canvas id="mapCanvas"></canvas>
 
 <script>
+
 const canvas = document.getElementById("mapCanvas");
 const ctx = canvas.getContext("2d");
+const debugPanel = document.getElementById("debugPanel");
 
 const baseCanvas = document.createElement("canvas");
 const baseCtx = baseCanvas.getContext("2d");
@@ -46,10 +65,10 @@ let ownership = {};
 let eraserMode = false;
 
 const COLORS = {
-  yellow: [255,255,0],
-  red: [255,0,0],
-  blue: [0,120,255],
-  green: [0,200,0]
+    yellow: [255,255,0],
+    red: [255,0,0],
+    blue: [0,120,255],
+    green: [0,200,0]
 };
 
 let selectedColor = "yellow";
@@ -59,230 +78,392 @@ function setEraser(){ eraserMode=true; }
 function resetMap(){ ownership={}; draw(); }
 
 img.onload = () => {
-  baseCanvas.width = img.width;
-  baseCanvas.height = img.height;
-  baseCtx.drawImage(img, 0, 0);
+    baseCanvas.width = img.width;
+    baseCanvas.height = img.height;
+    baseCtx.drawImage(img, 0, 0);
 
-  renderCanvas.width = img.width;
-  renderCanvas.height = img.height;
+    renderCanvas.width = img.width;
+    renderCanvas.height = img.height;
 
-  fitToScreen();
-  draw();
+    fitToScreen();
+    draw();
 };
 
 function fitToScreen(){
-  zoom = Math.min(window.innerWidth/img.width, window.innerHeight/img.height);
-  canvas.width = img.width * zoom;
-  canvas.height = img.height * zoom;
+    zoom = Math.min(window.innerWidth/img.width, window.innerHeight/img.height);
+    canvas.width = img.width * zoom;
+    canvas.height = img.height * zoom;
 }
 
 window.addEventListener("resize", ()=>{fitToScreen(); draw();});
 
 canvas.addEventListener("click", e=>{
-  const rect = canvas.getBoundingClientRect();
-  const x = Math.floor((e.clientX-rect.left)/zoom);
-  const y = Math.floor((e.clientY-rect.top)/zoom);
-  const p = baseCtx.getImageData(x,y,1,1).data;
-  const key = `${p[0]},${p[1]},${p[2]},${p[3]}`;
-  if(eraserMode) delete ownership[key];
-  else ownership[key]=selectedColor;
-  draw();
+    const rect = canvas.getBoundingClientRect();
+    const x = Math.floor((e.clientX-rect.left)/zoom);
+    const y = Math.floor((e.clientY-rect.top)/zoom);
+
+    const p = baseCtx.getImageData(x,y,1,1).data;
+    const key = `${p[0]},${p[1]},${p[2]},${p[3]}`;
+
+    if(eraserMode) delete ownership[key];
+    else ownership[key]=selectedColor;
+
+    draw();
 });
 
 function draw(){
-  ctx.setTransform(zoom,0,0,zoom,0,0);
-  ctx.clearRect(0,0,img.width,img.height);
+    ctx.setTransform(zoom,0,0,zoom,0,0);
+    ctx.clearRect(0,0,img.width,img.height);
 
-  drawOwnership();
-  ctx.drawImage(renderCanvas,0,0);
+    drawOwnership();
+    ctx.drawImage(renderCanvas,0,0);
 
-  ctx.setTransform(1,0,0,1,0,0);
-  drawBorders();
-  drawLabels();
+    ctx.setTransform(1,0,0,1,0,0);
+    drawBorders();
+    drawLabels();
 }
 
 function drawOwnership(){
-  const baseData = baseCtx.getImageData(0,0,baseCanvas.width,baseCanvas.height).data;
-  const imageData = renderCtx.createImageData(baseCanvas.width, baseCanvas.height);
-  const data = imageData.data;
+    const baseData = baseCtx.getImageData(0,0,baseCanvas.width,baseCanvas.height).data;
+    const imageData = renderCtx.createImageData(baseCanvas.width, baseCanvas.height);
+    const data = imageData.data;
 
-  for(let i=0;i<baseData.length;i+=4){
-    const key = `${baseData[i]},${baseData[i+1]},${baseData[i+2]},${baseData[i+3]}`;
-    const c = ownership[key] ? COLORS[ownership[key]] : [180,180,180];
-    data[i]=c[0]; data[i+1]=c[1]; data[i+2]=c[2]; data[i+3]=255;
-  }
+    for(let i=0;i<baseData.length;i+=4){
+        const key = `${baseData[i]},${baseData[i+1]},${baseData[i+2]},${baseData[i+3]}`;
+        const c = ownership[key] ? COLORS[ownership[key]] : [180,180,180];
+        data[i]=c[0]; data[i+1]=c[1]; data[i+2]=c[2]; data[i+3]=255;
+    }
 
-  renderCtx.putImageData(imageData,0,0);
+    renderCtx.putImageData(imageData,0,0);
 }
 
 function drawBorders(){
-  const w=baseCanvas.width, h=baseCanvas.height;
-  const data=baseCtx.getImageData(0,0,w,h).data;
+    const w=baseCanvas.width, h=baseCanvas.height;
+    const data=baseCtx.getImageData(0,0,w,h).data;
 
-  function p(x,y){
-    if(x<0||y<0||x>=w||y>=h) return "__edge__";
-    const i=(y*w+x)*4;
-    return `${data[i]},${data[i+1]},${data[i+2]},${data[i+3]}`;
-  }
-
-  function c(x,y){
-    return ownership[p(x,y)] || "__neutral__";
-  }
-
-  // province
-  ctx.beginPath();
-  for(let y=0;y<h;y++){
-    for(let x=0;x<w;x++){
-      if(p(x,y)!==p(x+1,y)){
-        ctx.moveTo((x+1)*zoom,y*zoom);
-        ctx.lineTo((x+1)*zoom,(y+1)*zoom);
-      }
-      if(p(x,y)!==p(x,y+1)){
-        ctx.moveTo(x*zoom,(y+1)*zoom);
-        ctx.lineTo((x+1)*zoom,(y+1)*zoom);
-      }
+    function p(x,y){
+        if(x<0||y<0||x>=w||y>=h) return "__edge__";
+        const i=(y*w+x)*4;
+        return `${data[i]},${data[i+1]},${data[i+2]},${data[i+3]}`;
     }
-  }
-  ctx.strokeStyle="rgba(0,0,0,0.25)";
-  ctx.lineWidth=1;
-  ctx.stroke();
 
-  // country
-  ctx.beginPath();
-  for(let y=0;y<h;y++){
-    for(let x=0;x<w;x++){
-      if(c(x,y)!==c(x+1,y)){
-        ctx.moveTo((x+1)*zoom,y*zoom);
-        ctx.lineTo((x+1)*zoom,(y+1)*zoom);
-      }
-      if(c(x,y)!==c(x,y+1)){
-        ctx.moveTo(x*zoom,(y+1)*zoom);
-        ctx.lineTo((x+1)*zoom,(y+1)*zoom);
-      }
+    function c(x,y){
+        return ownership[p(x,y)] || "__neutral__";
     }
-  }
-  ctx.strokeStyle="black";
-  ctx.lineWidth=4;
-  ctx.stroke();
+
+    ctx.beginPath();
+    for(let y=0;y<h;y++){
+        for(let x=0;x<w;x++){
+            if(p(x,y)!==p(x+1,y)){
+                ctx.moveTo((x+1)*zoom,y*zoom);
+                ctx.lineTo((x+1)*zoom,(y+1)*zoom);
+            }
+            if(p(x,y)!==p(x,y+1)){
+                ctx.moveTo(x*zoom,(y+1)*zoom);
+                ctx.lineTo((x+1)*zoom,(y+1)*zoom);
+            }
+        }
+    }
+    ctx.strokeStyle="rgba(0,0,0,0.25)";
+    ctx.lineWidth=1;
+    ctx.stroke();
+
+    ctx.beginPath();
+    for(let y=0;y<h;y++){
+        for(let x=0;x<w;x++){
+            if(c(x,y)!==c(x+1,y)){
+                ctx.moveTo((x+1)*zoom,y*zoom);
+                ctx.lineTo((x+1)*zoom,(y+1)*zoom);
+            }
+            if(c(x,y)!==c(x,y+1)){
+                ctx.moveTo(x*zoom,(y+1)*zoom);
+                ctx.lineTo((x+1)*zoom,(y+1)*zoom);
+            }
+        }
+    }
+    ctx.strokeStyle="black";
+    ctx.lineWidth=4;
+    ctx.stroke();
 }
 
-// ======================
-// FINAL LABEL SYSTEM
-// ======================
 function drawLabels(){
-  const w=baseCanvas.width, h=baseCanvas.height;
-  const data=baseCtx.getImageData(0,0,w,h).data;
 
-  function owner(x,y){
-    if(x<0||y<0||x>=w||y>=h) return "__neutral__";
-    const i=(y*w+x)*4;
-    const key=`${data[i]},${data[i+1]},${data[i+2]},${data[i+3]}`;
-    return ownership[key]||"__neutral__";
-  }
+    debugPanel.innerHTML = "";
 
-  const countries={};
+    const w=baseCanvas.width, h=baseCanvas.height;
+    const data=baseCtx.getImageData(0,0,w,h).data;
 
-  for(let y=0;y<h;y++){
-    for(let x=0;x<w;x++){
-      const o=owner(x,y);
-      if(o==="__neutral__") continue;
-      if(!countries[o]) countries[o]=[];
-      countries[o].push([x,y]);
-    }
-  }
-
-  for(let o in countries){
-    const pts=countries[o];
-    if(pts.length<150) continue;
-
-    let cx=0,cy=0;
-    for(const [x,y] of pts){ cx+=x; cy+=y; }
-    cx/=pts.length; cy/=pts.length;
-
-    let xx=0,yy=0,xy=0;
-    for(const [x,y] of pts){
-      const dx=x-cx, dy=y-cy;
-      xx+=dx*dx; yy+=dy*dy; xy+=dx*dy;
+    function owner(x,y){
+        if(x<0||y<0||x>=w||y>=h) return "__neutral__";
+        const i=(y*w+x)*4;
+        const key=`${data[i]},${data[i+1]},${data[i+2]},${data[i+3]}`;
+        return ownership[key]||"__neutral__";
     }
 
-    const theta=0.5*Math.atan2(2*xy,xx-yy);
-    const dir=[Math.cos(theta), Math.sin(theta)];
+    const groups={};
 
-    let bestLine=[], bestLen=0;
-
-    for(let offset=-60; offset<=60; offset+=3){
-      let seg=[];
-      for(let t=-500;t<=500;t++){
-        const x=Math.round(cx+dir[0]*t - dir[1]*offset);
-        const y=Math.round(cy+dir[1]*t + dir[0]*offset);
-
-        if(owner(x,y)===o) seg.push([x,y]);
-        else{
-          if(seg.length>bestLen){ bestLen=seg.length; bestLine=seg; }
-          seg=[];
+    for(let y=0;y<h;y++){
+        for(let x=0;x<w;x++){
+            const o=owner(x,y);
+            if(o==="__neutral__") continue;
+            if(!groups[o]) groups[o]=[];
+            groups[o].push([x,y]);
         }
-      }
-      if(seg.length>bestLen){ bestLen=seg.length; bestLine=seg; }
     }
 
-    if(bestLine.length<20) continue;
+    for(const o in groups){
 
-    const mid = bestLine[Math.floor(bestLine.length/2)];
+        const pts = groups[o];
+        if(pts.length < 200) continue;
 
-    const dx=bestLine.at(-1)[0]-bestLine[0][0];
-    const dy=bestLine.at(-1)[1]-bestLine[0][1];
-    const lineLength=Math.hypot(dx,dy);
+        let cx=0, cy=0;
+        for(const [x,y] of pts){ cx+=x; cy+=y; }
+        cx/=pts.length; cy/=pts.length;
 
-    const text=o.toUpperCase();
+        let bestTheta = 0;
+        let bestScore = -Infinity;
 
-    // 🔥 better growth
-    let fontSize = Math.pow(pts.length, 0.6) * 0.015;
-    fontSize = Math.max(28, Math.min(160, fontSize));
+        for(let a=-Math.PI/2;a<=Math.PI/2;a+=Math.PI/36){
+            const dir=[Math.cos(a),Math.sin(a)];
+            const normal=[-dir[1],dir[0]];
 
-    ctx.font = `bold ${fontSize}px Georgia`;
+            let minL=1e9,maxL=-1e9,minT=1e9,maxT=-1e9;
 
-    let textWidth = ctx.measureText(text).width;
+            for(const [x,y] of pts){
+                const dx=x-cx, dy=y-cy;
+                const l=dx*dir[0]+dy*dir[1];
+                const t=dx*normal[0]+dy*normal[1];
 
-    if(textWidth > lineLength * 1.6){
-      fontSize *= (lineLength * 1.6) / textWidth;
-      ctx.font = `bold ${fontSize}px Georgia`;
-      textWidth = ctx.measureText(text).width;
+                if(l<minL)minL=l;
+                if(l>maxL)maxL=l;
+                if(t<minT)minT=t;
+                if(t>maxT)maxT=t;
+            }
+
+            const length=maxL-minL;
+            const thickness=maxT-minT;
+			
+			const score = length * 0.9 + thickness * 0.6;
+
+            if(score>bestScore){
+                bestScore=score;
+                bestTheta=a;
+            }
+        }
+
+        const theta=bestTheta;
+        const dir=[Math.cos(theta),Math.sin(theta)];
+        const normal=[-dir[1],dir[0]];
+        let minL=1e9,maxL=-1e9,minT=1e9,maxT=-1e9;
+
+        for(const [x,y] of pts){
+            const dx=x-cx, dy=y-cy;
+            const l=dx*dir[0]+dy*dir[1];
+            const t=dx*normal[0]+dy*normal[1];
+
+            if(l<minL)minL=l;
+            if(l>maxL)maxL=l;
+            if(t<minT)minT=t;
+            if(t>maxT)maxT=t;
+        }
+
+        const length=maxL-minL;
+        const thickness=maxT-minT;
+
+        const text=o.toUpperCase();
+
+        let fontSize=Math.max(18,Math.min(200,thickness*1.5));
+        let spacing=(length*0.75)/(text.length-1);
+
+        ctx.font=`bold ${fontSize}px Georgia`;
+
+        ctx.save();
+        ctx.translate(cx*zoom,cy*zoom);
+		let finalTheta = theta;
+
+		// flip only if upside-down
+		if(Math.cos(finalTheta) < 0){
+			finalTheta += Math.PI;
+		}
+
+		ctx.rotate(finalTheta);
+
+        ctx.lineWidth=Math.max(1,fontSize*0.06);
+        ctx.fillStyle="white";
+        ctx.strokeStyle="black";
+
+        let start=-spacing*(text.length-1)/2;
+
+		function bezier(t, c1x, c1y){
+			const x0 = start;
+			const x2 = start + spacing*(text.length-1);
+
+			const mid = (x0 + x2) * 0.5;
+
+			const cx = mid + c1x; // 🔥 THIS FIXES DIRECTION
+			const cy = c1y;
+
+			const x = (1-t)*(1-t)*x0 + 2*(1-t)*t*cx + t*t*x2;
+			const y = (1-t)*(1-t)*0 + 2*(1-t)*t*cy + t*t*0;
+
+			return [x,y];
+		}
+		
+        // NEW: arc-length sampling
+		function sampleCurve(c1x, c1y){
+            const samples=[];
+            let total=0;
+
+            for(let i=0;i<=100;i++){
+                const t=i/100;
+                const [x,y]=bezier(t,c1x,c1y);
+
+                if(i>0){
+                    const dx=x-samples[i-1].x;
+                    const dy=y-samples[i-1].y;
+                    total+=Math.hypot(dx,dy);
+                }
+
+                samples.push({x,y,d:total});
+            }
+
+            return {samples,total};
+        }
+
+        function getPoint(samples,total,dist){
+            for(let i=1;i<samples.length;i++){
+                if(samples[i].d>=dist){
+                    const p0=samples[i-1];
+                    const p1=samples[i];
+                    const t=(dist-p0.d)/(p1.d-p0.d);
+
+                    const x=p0.x+(p1.x-p0.x)*t;
+                    const y=p0.y+(p1.y-p0.y)*t;
+
+                    const angle=Math.atan2(p1.y-p0.y,p1.x-p0.x);
+
+                    return {x,y,angle};
+                }
+            }
+            return samples[samples.length-1];
+        }
+
+		function testCurve(c1x, c1y){
+			const sample = sampleCurve(c1x, c1y);
+
+			let inside = 0;
+			let foreignPenalty = 0;
+			let deviation = 0;
+			let directionPenalty = 0;
+
+			for(let i=1;i<text.length;i++){
+				const d0 = sample.total * ((i-1)/(text.length-1));
+				const d1 = sample.total * (i/(text.length-1));
+
+				const p0 = getPoint(sample.samples, sample.total, d0);
+				const p1 = getPoint(sample.samples, sample.total, d1);
+
+				const wx0 = cx + (p0.x*dir[0] + p0.y*normal[0]);
+				const wy0 = cy + (p0.x*dir[1] + p0.y*normal[1]);
+
+				const wx1 = cx + (p1.x*dir[0] + p1.y*normal[0]);
+				const wy1 = cy + (p1.x*dir[1] + p1.y*normal[1]);
+
+				const o2 = owner(Math.floor(wx1), Math.floor(wy1));
+
+				const dx = wx1 - cx;
+				const dy = wy1 - cy;
+
+				// distance from centerline
+				const offset = dx*normal[0] + dy*normal[1];
+				const radialDist = Math.abs(offset);
+
+				// normalize by region thickness
+				const normDist = radialDist / (thickness * 0.5 + 1);
+
+				if(o2 === o){
+					inside++;
+				}
+				else if(o2 !== "__neutral__"){
+					// 🔥 KEY FIX: deeper outside = much worse
+					foreignPenalty += 1 + normDist * normDist * 4;
+				}
+
+				deviation += Math.abs(offset);
+
+				const vx = wx1 - wx0;
+				const vy = wy1 - wy0;
+
+				const len = Math.hypot(vx, vy) || 1;
+				const nx = vx / len;
+				const ny = vy / len;
+
+				const dot = nx*dir[0] + ny*dir[1];
+				directionPenalty += (1 - dot);
+			}
+
+			const coverage = inside / text.length;
+			const span = sample.total;
+			const bend = Math.abs(c1y);
+
+			const idealSpan = spacing * (text.length-1);
+			const spanPenalty = Math.abs(span - idealSpan);
+
+			const avgDeviation = deviation / text.length;
+			const avgDirPenalty = directionPenalty / text.length;
+
+			return (
+				coverage * 120
+				- foreignPenalty * 18   // 🔥 replaces old "- foreign * 25"
+				+ span * 0.05
+				- spanPenalty * 0.12
+				- bend * 0.4
+				- avgDeviation * 1.4
+				- avgDirPenalty * 80
+			);
+		}
+
+		let best={score:-Infinity,c1x:0,c1y:0};
+
+		for(let bx=-length*0.3; bx<=length*0.3; bx+=10){
+			for(let by=-thickness*0.8; by<=thickness*0.8; by+=4){
+
+				const s = testCurve(bx, by);
+
+				if(s > best.score){
+					best = {score:s, c1x:bx, c1y:by};
+				}
+			}
+		}
+
+        const sample=sampleCurve(best.c1x, best.c1y);
+
+        for(let i=0;i<text.length;i++){
+
+            const dist=sample.total*(i/(text.length-1));
+            const pt=getPoint(sample.samples,sample.total,dist);
+
+            ctx.save();
+
+            ctx.translate(pt.x*zoom,pt.y*zoom);
+            ctx.rotate(pt.angle);
+
+            ctx.strokeText(text[i],0,0);
+            ctx.fillText(text[i],0,0);
+
+            ctx.restore();
+        }
+
+        ctx.restore();
+
+        debugPanel.innerHTML += `
+        <div>
+        <b>${o}</b><br>
+        bend:${best.c1y.toFixed(1)}<br>
+        score:${best.score.toFixed(1)}
+        </div>`;
     }
-
-    // 🔥 bias shift
-    const bias = bestLine.length * 0.15;
-    const baseX = mid[0] + dir[0]*bias;
-    const baseY = mid[1] + dir[1]*bias;
-
-    let offset = -textWidth / 2;
-
-    ctx.lineWidth = Math.max(1.5, fontSize * 0.05);
-    ctx.fillStyle="white";
-    ctx.strokeStyle="black";
-
-    const tracking = fontSize > 50 ? fontSize * 0.06 : 0;
-
-    for(let i=0;i<text.length;i++){
-      const char = text[i];
-      const wChar = ctx.measureText(char).width;
-
-      const x = baseX + dir[0]*offset;
-      const y = baseY + dir[1]*offset;
-
-      ctx.save();
-      ctx.translate(x*zoom,y*zoom);
-      ctx.rotate(theta);
-
-      ctx.strokeText(char,0,0);
-      ctx.fillText(char,0,0);
-
-      ctx.restore();
-
-      offset += wChar + tracking;
-    }
-  }
 }
 </script>
-
 </body>
 </html>
